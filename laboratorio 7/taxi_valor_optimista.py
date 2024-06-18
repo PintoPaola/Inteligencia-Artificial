@@ -8,13 +8,15 @@ import matplotlib.pyplot as plt
 
 def train(episodes):
     env = gym.make('Taxi-v3')
-    q_table = np.zeros((env.observation_space.n, env.action_space.n))
+    # Inicializa la tabla Q con valores altos (valores optimistas)
+    optimistic_initial_value = 10.0
+    q_table = np.full((env.observation_space.n, env.action_space.n), optimistic_initial_value)
 
     # Define los parámetros del algoritmo Q-learning
     learning_rate = 0.01  # Tasa de aprendizaje
     discount_factor = 0.95  # Factor de descuento de la recompensa
     epsilon = 1.0
-    epsilon_decay_rate =  0.005
+    epsilon_decay_rate = 0.005
     rng = np.random.default_rng()
 
     # Inicializa un array para almacenar las recompensas obtenidas
@@ -42,17 +44,17 @@ def train(episodes):
             if rng.random() < epsilon:
                 action = env.action_space.sample()  # Exploración
             else:
-                action = np.argmax(q_table[state,:])
+                action = np.argmax(q_table[state, :])  # Explotación
 
             # Realiza la acción y obtiene el nuevo estado, la recompensa y los indicadores de terminación y truncado
             new_state, reward, terminated, truncated, _ = env.step(action)
 
             # Actualiza la tabla Q con la nueva información
             q_table[state, action] = q_table[state, action] + learning_rate * (
-                reward + discount_factor * np.max(q_table[new_state]) - q_table[state, action])
+                reward + discount_factor * np.max(q_table[new_state, :]) - q_table[state, action])
 
             # Actualiza el estado para el siguiente paso
-            state = new_state  # Obtén el primer elemento de la nueva tupla de estado
+            state = new_state
 
             # Reduce epsilon para disminuir la exploración a lo largo del tiempo
             epsilon = max(epsilon - epsilon_decay_rate, 0)

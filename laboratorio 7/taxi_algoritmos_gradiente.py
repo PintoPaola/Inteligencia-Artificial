@@ -6,19 +6,19 @@ import gymnasium as gym
 import numpy as np
 import matplotlib.pyplot as plt
 
-def train(episodes):
+def train(episodes, alpha=0.01):
     env = gym.make('Taxi-v3')
-    q_table = np.zeros((env.observation_space.n, env.action_space.n))
+    preference_table = np.zeros((env.observation_space.n, env.action_space.n))
 
-    # Define los parámetros del algoritmo Q-learning
-    learning_rate = 0.01  # Tasa de aprendizaje
+    # Parámetros del algoritmo de gradiente
     discount_factor = 0.95  # Factor de descuento de la recompensa
     epsilon = 1.0
-    epsilon_decay_rate =  0.005
+    epsilon_decay_rate = 0.005
     rng = np.random.default_rng()
 
     # Inicializa un array para almacenar las recompensas obtenidas
     rewards_per_episode = np.zeros(episodes)  # Recompensa por episodio
+    avg_reward = 0
 
     # Bucle principal de entrenamiento
     for i in range(episodes):
@@ -38,18 +38,28 @@ def train(episodes):
 
         # Bucle para cada paso dentro de un episodio
         while not terminated and not truncated:
+            # Calcula la política (probabilidades de seleccionar cada acción)
+            exp_preferences = np.exp(preference_table[state])
+            policy = exp_preferences / np.sum(exp_preferences)
+
             # Decisión de acción: explorar o explotar
             if rng.random() < epsilon:
                 action = env.action_space.sample()  # Exploración
             else:
-                action = np.argmax(q_table[state,:])
+                action = rng.choice(np.arange(env.action_space.n), p=policy)
 
             # Realiza la acción y obtiene el nuevo estado, la recompensa y los indicadores de terminación y truncado
             new_state, reward, terminated, truncated, _ = env.step(action)
 
-            # Actualiza la tabla Q con la nueva información
-            q_table[state, action] = q_table[state, action] + learning_rate * (
-                reward + discount_factor * np.max(q_table[new_state]) - q_table[state, action])
+            # Actualiza el promedio de recompensa
+            avg_reward = avg_reward + (reward - avg_reward) / (i + 1)
+
+            # Actualiza las preferencias de las acciones utilizando el gradiente
+            for a in range(env.action_space.n):
+                if a == action:
+                    preference_table[state, a] += alpha * (reward - avg_reward) * (1 - policy[a])
+                else:
+                    preference_table[state, a] -= alpha * (reward - avg_reward) * policy[a]
 
             # Actualiza el estado para el siguiente paso
             state = new_state  # Obtén el primer elemento de la nueva tupla de estado
@@ -57,20 +67,19 @@ def train(episodes):
             # Reduce epsilon para disminuir la exploración a lo largo del tiempo
             epsilon = max(epsilon - epsilon_decay_rate, 0)
 
-        # Registra si el agente obtuvo una recompensa en este episodio
-        if reward == 20:  # El reward para llegar al objetivo en Taxi-v3 es 20
-            rewards_per_episode[i] = 1
+        # Registra la recompensa obtenida en este episodio
+        rewards_per_episode[i] = reward
 
         # Imprime el progreso cada 100 episodios
         if (i + 1) % 100 == 0:
-            print(f"Episodio: {i + 1} - Recompensa: {rewards_per_episode[i]}")
+            print(f"Episodio: {i + 1} - Recompensa acumulada: {np.sum(rewards_per_episode[max(0, i - 99):i + 1])}")
 
     # Cierra el entorno al finalizar el entrenamiento
     env.close()
 
-    # Imprime la tabla Q final para inspección
-    print("Mejor Q:")
-    print(q_table)
+    # Imprime la tabla de preferencias final para inspección
+    print("Mejor tabla de preferencias:")
+    print(preference_table)
 
     # Grafica las recompensas acumuladas
     sum_rewards = np.zeros(episodes)

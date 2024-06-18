@@ -9,13 +9,15 @@ import matplotlib.pyplot as plt
 def train(episodes):
     env = gym.make('Taxi-v3')
     q_table = np.zeros((env.observation_space.n, env.action_space.n))
+    action_counts = np.zeros((env.observation_space.n, env.action_space.n))
 
     # Define los parámetros del algoritmo Q-learning
     learning_rate = 0.01  # Tasa de aprendizaje
     discount_factor = 0.95  # Factor de descuento de la recompensa
     epsilon = 1.0
-    epsilon_decay_rate =  0.005
+    epsilon_decay_rate = 0.005
     rng = np.random.default_rng()
+    c = 1.0  # Constante que controla el ratio de exploración
 
     # Inicializa un array para almacenar las recompensas obtenidas
     rewards_per_episode = np.zeros(episodes)  # Recompensa por episodio
@@ -38,11 +40,12 @@ def train(episodes):
 
         # Bucle para cada paso dentro de un episodio
         while not terminated and not truncated:
-            # Decisión de acción: explorar o explotar
+            # Decisión de acción usando el método de intervalo de confianza
             if rng.random() < epsilon:
                 action = env.action_space.sample()  # Exploración
             else:
-                action = np.argmax(q_table[state,:])
+                action_values = q_table[state, :] + c * np.sqrt(np.log(i + 1) / (action_counts[state, :] + 1e-5))
+                action = np.argmax(action_values)
 
             # Realiza la acción y obtiene el nuevo estado, la recompensa y los indicadores de terminación y truncado
             new_state, reward, terminated, truncated, _ = env.step(action)
@@ -51,6 +54,9 @@ def train(episodes):
             q_table[state, action] = q_table[state, action] + learning_rate * (
                 reward + discount_factor * np.max(q_table[new_state]) - q_table[state, action])
 
+            # Actualiza el conteo de la acción
+            action_counts[state, action] += 1
+
             # Actualiza el estado para el siguiente paso
             state = new_state  # Obtén el primer elemento de la nueva tupla de estado
 
@@ -58,8 +64,7 @@ def train(episodes):
             epsilon = max(epsilon - epsilon_decay_rate, 0)
 
         # Registra si el agente obtuvo una recompensa en este episodio
-        if reward == 20:  # El reward para llegar al objetivo en Taxi-v3 es 20
-            rewards_per_episode[i] = 1
+        rewards_per_episode[i] = reward
 
         # Imprime el progreso cada 100 episodios
         if (i + 1) % 100 == 0:
